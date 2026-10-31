@@ -1,0 +1,21 @@
+{
+  "name": "crease-server",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch index.js",
+    "import:all": "node --max-old-space-size=4096 scripts/importCricsheet.js",
+    "audit": "node scripts/audit.js",
+    "peek": "node scripts/peek.js",
+    "finals": "node scripts/finals.js",
+    "update:data": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update-data.ps1 && node --max-old-space-size=4096 scripts/importCricsheet.js",
+    "probe": "node scripts/probe.js",
+    "start": "node index.js",
+    "reset:live": "node scripts/resetLive.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mongoose": "^8.5.0"
+  }
+}

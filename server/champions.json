@@ -1,0 +1,63 @@
+{
+  "Ranji Trophy": {
+    "2025/26": "Jammu & Kashmir",
+    "2024/25": "Vidarbha",
+    "2023/24": "Mumbai",
+    "2022/23": "Saurashtra",
+    "2021/22": "Madhya Pradesh",
+    "2019/20": "Saurashtra",
+    "2018/19": "Vidarbha",
+    "2017/18": "Vidarbha",
+    "2016/17": "Gujarat",
+    "2015/16": "Mumbai"
+  },
+  "Vijay Hazare Trophy": {
+    "2025/26": "Vidarbha",
+    "2024/25": "Karnataka",
+    "2023/24": "Haryana",
+    "2022/23": "Saurashtra",
+    "2021/22": "Himachal Pradesh",
+    "2020/21": "Mumbai",
+    "2019/20": "Karnataka",
+    "2018/19": "Mumbai",
+    "2017/18": "Karnataka",
+    "2016/17": "Tamil Nadu"
+  },
+  "Syed Mushtaq Ali Trophy": {
+    "2025/26": "Jharkhand",
+    "2024/25": "Mumbai",
+    "2023/24": "Punjab",
+    "2022/23": "Mumbai",
+    "2021/22": "Tamil Nadu",
+    "2020/21": "Tamil Nadu",
+    "2019/20": "Karnataka",
+    "2018/19": "Karnataka",
+    "2017/18": "Delhi",
+    "2016/17": "East Zone"
+  },
+  "Irani Cup": {
+    "2025/26": "Rest of India",
+    "2024/25": "Mumbai",
+    "2023/24": "Rest of India",
+    "2022/23": "Rest of India",
+    "2021/22": "Rest of India",
+    "2018/19": "Vidarbha",
+    "2017/18": "Vidarbha",
+    "2016/17": "Rest of India",
+    "2015/16": "Rest of India",
+    "2014/15": "Karnataka"
+  },
+  "Duleep Trophy": {
+    "2026/27": "East Zone",
+    "2025/26": "Central Zone",
+    "2024/25": "India A",
+    "2023/24": "South Zone",
+    "2022/23": "West Zone",
+    "2019/20": "India Red",
+    "2018/19": "India Blue",
+    "2017/18": "India Red",
+    "2016/17": "India Blue",
+    "2014/15": "Central Zone"
+  }
+}
+

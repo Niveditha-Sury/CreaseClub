@@ -1,0 +1,1 @@
+export const mkKey = m => `${m.league}|${m.format || ''}|${m.date}|${[m.teamA, m.teamB].sort().join('v')}`;

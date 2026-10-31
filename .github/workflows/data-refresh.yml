@@ -1,0 +1,25 @@
+name: Refresh data
+on:
+  schedule: [{ cron: '0 3,15 * * *' }]
+  workflow_dispatch:
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Download Cricsheet data
+        run: |
+          mkdir -p data/cricsheet
+          for s in ipl_male wpl_female sma_male t20s_male odis_male tests_male t20s_female odis_female tests_female; do
+            curl -fsSL "https://cricsheet.org/downloads/${s}_json.zip" -o "$s.zip"
+            unzip -qo "$s.zip" -d data/cricsheet
+            rm "$s.zip"
+          done
+      - run: npm install
+        working-directory: server
+      - run: node --max-old-space-size=4096 scripts/importCricsheet.js
+        working-directory: server
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
