@@ -352,6 +352,16 @@ function TeamPage({ code, format }) {
   </main>;
 }
 
+function WakeNotice() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    let done = false; const t = setTimeout(() => !done && setSlow(true), 3000);
+    get('/api/health').catch(() => {}).finally(() => { done = true; clearTimeout(t); setSlow(false); });
+    return () => clearTimeout(t);
+  }, []);
+  return slow ? <div className="fixed bottom-4 inset-x-4 z-40 mx-auto max-w-md card p-3 text-sm text-center">⏳ Waking up the free-tier server. The first load can take up to a minute.</div> : null;
+}
+
 /* ---------- app ---------- */
 export default function App() {
   const hash = useHash(), rt = route(hash), [ready, setReady] = useState(!!rt), [teams, setTeams] = useState([]), [live, setLive] = useState([]);
@@ -360,6 +370,7 @@ export default function App() {
   useEffect(() => { get('/api/teams?domestic=false').then(setTeams).catch(() => {}); }, []);
   useEffect(() => { const load = () => get('/api/live').then(setLive).catch(() => {}); load(); const t = setInterval(load, 60000); return () => clearInterval(t); }, []);
   return <div className="min-h-screen">
+    <WakeNotice />
     <header className="absolute top-0 inset-x-0 z-20"><div className="max-w-6xl mx-auto px-4 h-14 flex items-center"><a href="#" className="font-display font-extrabold text-lg">Crease Club</a></div></header>
     {rt ? <TeamPage code={rt.code} format={rt.format} /> : <>
       <Hero ready={ready} live={live} />
