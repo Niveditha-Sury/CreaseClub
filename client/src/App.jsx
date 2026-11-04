@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 const API = import.meta.env.VITE_API_URL || '';
 const get = u => fetch(API + u).then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))));
 const post = async (u, b) => {
@@ -10,7 +10,12 @@ const hash = s => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 const form = r => { if (!r?.length) return 'No recent knocks'; const a = r.reduce((s, x) => s + x, 0) / r.length; return a > 40 ? 'In Golden Form' : a > 20 ? 'Finding the Gap' : 'In the Mud'; };
 const go = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
 const pred = (a, b, toss) => get(`/api/predict?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}${toss ? `&toss=${encodeURIComponent(toss)}` : ''}`);
-const route = h => { const m = h.match(/^#\/team\/([^/?]+)(?:\?format=(\w+))?/); return m ? { code: decodeURIComponent(m[1]), format: m[2] || '' } : null; };
+const route = h => {
+  let m = h.match(/^#\/team\/([^/?]+)(?:\?format=(\w+))?/); if (m) return { type: 'team', code: decodeURIComponent(m[1]), format: m[2] || '' };
+  m = h.match(/^#\/player\/([^?]+)(?:\?ctx=(\w+))?/); if (m) return { type: 'player', name: decodeURIComponent(m[1]), ctx: m[2] || '' };
+  if (/^#\/matches/.test(h)) return { type: 'matches' };
+  return /^#\/bookmarks/.test(h) ? { type: 'bookmarks' } : null;
+};
 const useHash = () => { const [h, setH] = useState(location.hash);
   useEffect(() => { const f = () => { setH(location.hash); window.scrollTo(0, 0); }; addEventListener('hashchange', f); return () => removeEventListener('hashchange', f); }, []); return h; };
 const women = m => m.league === 'WPL' || /W$/.test(m.teamA) && /W$/.test(m.teamB) || m.teamA === 'INDW' || m.teamB === 'INDW' || /\(W\)/.test(`${m.teamA}${m.teamB}`);
@@ -109,7 +114,7 @@ function Hero({ ready, live }) {
 }
 
 /* ---------- home sections ---------- */
-const TeamCard = ({ t }) => <a href={`#/team/${t.code}`} className={`card block p-4 h-full relative ${t.champion ? 'champ' : ''}`}>
+const TeamCard = ({ t, fit }) => <a href={`#/team/${t.code}`} className={`card block p-4 ${fit ? '' : 'h-full'} relative ${t.champion ? 'champ' : ''}`}>
   {t.champion && <span className="absolute -top-2 right-3 text-[9px] font-pixel bg-gold text-bg px-2 py-1 rounded">CHAMPS{t.champOf?.length ? ` · ${t.champOf.join(' · ')}` : ''}</span>}
   <div className="h-1.5 rounded-full mb-3" style={{ background: t.color }} />
   <div className="flex justify-between items-start"><span className="font-pixel text-xl" style={{ color: t.color }}>{t.code}</span><Cups years={t.titles} /></div>
@@ -154,8 +159,9 @@ function LiveCard({ m }) {
   const a = m.nameA || m.teamA, b = m.nameB || m.teamB, where = m.league === 'Other' ? 'World cricket' : m.league;
   return <div className="card p-4 min-w-0">
     <div className="flex items-center gap-2 text-[10px] text-mute">{m.status === 'live' && <span className="livedot" />}
-      <b className={m.status === 'live' ? 'text-lime' : ''}>{m.status === 'live' ? 'LIVE' : `UPCOMING · ${m.date}`}</b>
+      <b className={m.status === 'live' ? 'text-lime' : ''}>{m.status === 'live' ? 'LIVE' : `UPCOMING · ${m.startAt ? new Date(m.startAt).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : m.date}`}</b>
       <span className="truncate">{[where, m.format, women(m) ? 'Women' : ''].filter(Boolean).join(' · ')}</span></div>
+    {m.confirmed && <span className="chip">✓ 2 feeds</span>}
     <div className="font-display font-bold mt-2 leading-tight">{a} v {b}</div>
     {m.event && <div className="text-[11px] text-mute mt-1 truncate">{m.event}</div>}
     <div className="text-xs text-mute mt-1">{m.score || m.venue || ''}</div>
@@ -181,10 +187,20 @@ function LiveSection({ live }) {
   </section>;
 }
 
+const FALLBACK = [
+  ['🔴 Red-Ball / First-Class', [['ranji', "Ranji Trophy (Men's)"], ['duleep', "Duleep Trophy (Men's)"], ['irani', "Irani Cup (Men's)"], ['w-multi', "Senior Women's Multi-Day Trophy"]]],
+  ['⚪ 50-Over / One Day (List A)', [['vhr', "Vijay Hazare Trophy (Men's)"], ['deodhar', "Deodhar Trophy (Men's)"], ['w-odi', "Senior Women's One Day Trophy"], ['w-odi-zonal', "Senior Women's Inter-Zonal One Day Trophy"]]],
+  ['⚡ 20-Over / T20', [['smat', "Syed Mushtaq Ali Trophy (Men's)"], ['w-t20', "Senior Women's T20 Trophy"], ['w-t20-zonal', "Senior Women's Inter-Zonal T20 Trophy"], ['ipl', 'Indian Premier League (IPL)'], ['wpl', "Women's Premier League (WPL)"]]]];
+
 function DomesticSection() {
   const [cat, setCat] = useState(null), [sid, setSid] = useState(''), [data, setData] = useState(null), [up, setUp] = useState([]), [mid, setMid] = useState(''), [p, setP] = useState(null), [busy, setBusy] = useState(false);
   const mk = m => m.key || `${m.date}|${m.teamA}|${m.teamB}`;
-  useEffect(() => { get('/api/domestic/catalog').then(c => { setCat(c); const all = c.flatMap(g => g.items); setSid((all.find(x => x.has) || all[0])?.id || ''); }).catch(() => setCat([])); }, []);
+  const [catErr, setCatErr] = useState('');
+  useEffect(() => {
+  const use = c => { setCat(c); const all = c.flatMap(g => g.items); setSid((all.find(x => x.has) || all[0])?.id || ''); };
+  get('/api/domestic/catalog').then(c => (c.length ? use(c) : Promise.reject(new Error('empty list'))))
+  .catch(e => { setCatErr(e.message); use(FALLBACK.map(([group, items]) => ({ group, items: items.map(([id, label]) => ({ id, label, has: true })) }))); });
+  }, []);
   useEffect(() => {
     if (!sid) return; let on = true; setData(null); setUp([]); setMid(''); setP(null);
     get(`/api/domestic/teams?series=${sid}`).then(x => on && setData(x)).catch(() => on && setData({ teams: [], honours: [] }));
@@ -203,7 +219,8 @@ function DomesticSection() {
         {(cat || []).map(g => <optgroup key={g.group} label={g.group}>{g.items.map(i => <option key={i.id} value={i.id}>{i.label}</option>)}</optgroup>)}</select>
       <select value={mid} onChange={e => { setMid(e.target.value); setP(null); }} disabled={!up.length} className="bg-bg border border-line rounded-full px-3 py-2 text-sm min-w-[16rem] max-w-full">
         <option value="">{up.length ? `Upcoming matches (${up.length})` : 'No upcoming matches'}</option>
-        {up.map(m => <option key={mk(m)} value={mk(m)}>{fmtShort(m.date)} · {nm(m, 'A')} v {nm(m, 'B')}</option>)}</select></div></Reveal>
+        {up.map(m => <option key={mk(m)} value={mk(m)}>{fmtShort(m.date)} · {nm(m, 'A')} v {nm(m, 'B')}</option>)}</select>
+          {catErr && <p className="text-xs text-red-400">Couldn't load the tournament list from the API ({catErr}), so the default list is shown. Check that the server is running the latest code.</p>}</div></Reveal>
     {data && <div className="card p-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
       {honours[0] ? <><span>🏆 <b>Reigning champions:</b> {honours[0].name} <span className="text-mute">({honours[0].season})</span></span>
         {honours.length > 1 && <span className="text-xs text-mute">Previous: {honours.slice(1, 6).map(h => `${h.name} ${h.season}`).join(' · ')}</span>}</>
@@ -215,6 +232,7 @@ function DomesticSection() {
       {p?.err && <span className="text-xs text-red-400">Couldn't predict this one.</span>}</div>}
     {teams === null && sid && <p className="text-sm text-mute">Loading teams…</p>}
     {teams?.length === 0 && <Duck text="Out for a duck! No teams for this tournament yet. It needs Cricsheet data or a live API feed that carries it." />}
+    {teams?.length > 0 && data && !data.hasMatches && <p className="text-xs text-mute">These cards come from the champions list. Match, lineup and player data isn't published for this tournament, so team pages will be mostly empty.</p>}
     {teams?.length > 0 && <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">{teams.map((t, i) => <Reveal key={sid + t.code} delay={(i % 5) * 60}><TeamCard t={{ ...t, titles: t.years, champion: t.reigning, champOf: [] }} /></Reveal>)}</div>}
   </section>;
 }
@@ -259,11 +277,14 @@ const agg = rs => {
 function PlayerModal({ id, team, onClose }) {
   const [p, setP] = useState(null), [rows, setRows] = useState([]), [tab, setTab] = useState('League'), [yr, setYr] = useState('career'), [badges, setBadges] = useState([]), [saved, setSaved] = useState(false);
   useEffect(() => { get(`/api/players/${id}`).then(setP); get(`/api/players/${id}/seasons`).then(setRows).catch(() => setRows([])); get(`/api/players/${id}/badges`).then(setBadges).catch(() => {}); }, [id]);
-  useEffect(() => { if (!p) return; const first = ['League', 'T20', 'ODI', 'Test', 'Domestic'].find(k => p.stats?.[k] || rows.some(r => r.tab === k)); if (first) setTab(first); }, [p, rows]);
+  const ALL = [['Test', 'Test'], ['ODI', 'ODI'], ['T20', 'T20'], ['League', 'IPL / WPL'], ['Domestic', 'Domestic']];
+  // The year is global. Format tabs only appear for formats the player actually has data for in that year.
+  const tabs = !p ? [] : ALL.filter(([a]) => (yr === 'career' ? p.stats?.[a] || rows.some(r => r.tab === a) : rows.some(r => r.tab === a && r.season === yr)));
+  const years = [...new Set(rows.map(r => r.season))].sort().reverse();
+  useEffect(() => { if (tabs.length && !tabs.some(([a]) => a === tab)) setTab(tabs[0][0]); }, [p, rows, yr, tab]);
   if (!p) return null;
-  const k = kindOf(p.role), tabRows = rows.filter(r => r.tab === tab), years = [...new Set(tabRows.map(r => r.season))].sort().reverse();
+  const k = kindOf(p.role), tabRows = rows.filter(r => r.tab === tab);
   const s = yr === 'career' ? (p.stats?.[tab] ?? agg(tabRows)) : agg(tabRows.filter(r => r.season === yr)), b = s?.bat || {}, w = s?.bowl || {};
-  const tabs = [['Test', 'Test'], ['ODI', 'ODI'], ['T20', 'T20'], ['League', 'IPL / WPL'], ['Domestic', 'Domestic']].filter(([a]) => p.stats?.[a] || rows.some(r => r.tab === a));
   const save = () => post('/api/bookmarks', { userId: 'guest', kind: 'player', refId: id }).then(() => setSaved(true)).catch(() => {});
   const Row = ([a, v]) => <div key={a} className="flex justify-between py-1.5 border-b border-line text-sm"><span className="text-mute">{a}</span><b>{v ?? '–'}</b></div>;
   return <div className="fixed inset-0 z-30 bg-black/70 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
@@ -271,13 +292,13 @@ function PlayerModal({ id, team, onClose }) {
       <div className="flex gap-4 items-center"><PixelAvatar name={p.name} color={team.color} accent={team.accent} size={64} />
         <div className="min-w-0 flex-1"><h2 className="font-display font-extrabold text-xl truncate">{p.name}</h2><p className="text-sm text-mute">{p.role} · {team.code}</p><Tags p={p} /><p className="text-xs mt-2 text-lime">{form(p.recent)}</p></div>
         <div className="text-right"><div className="font-pixel text-2xl text-lime">{p.impact}</div><div className="text-[10px] text-mute">IMPACT</div></div></div>
-      {badges.length > 0 && <div className="flex gap-2 flex-wrap mt-3">{badges.map(x => <span key={x} className="chip text-gold border-gold/40">{x}</span>)}</div>}
+      {badges.length > 0 && <div className="flex gap-2 mt-3 flex-wrap">{badges.map(x => <span key={x} className="chip text-gold border-gold/40">{x}</span>)}</div>}
       {k !== 'bowl' && <><p className="mt-4 text-xs text-mute">Last 5 innings</p>
         <div className="flex gap-2 mt-1">{p.recent.map((r, i) => <span key={i} className="font-pixel text-[11px] px-2 py-2 rounded-lg bg-bg border border-line">{r}</span>)}</div></>}
-      <div className="flex gap-2 mt-4 flex-wrap items-center">{tabs.map(([a, l]) => <button key={a} className="btn" aria-pressed={tab === a} onClick={() => { setTab(a); setYr('career'); }}>{l}</button>)}</div>
-      <div className="flex items-center gap-2 my-3"><span className="text-xs text-mute">Year</span>
+      <div className="flex items-center gap-2 mt-4"><span className="text-xs text-mute">Year</span>
         <select value={yr} onChange={e => setYr(e.target.value)} className="bg-bg border border-line rounded-full px-3 py-1.5 text-sm"><option value="career">Career</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
         {yr !== 'career' && s?.m != null && <span className="text-xs text-mute">{s.m} matches</span>}</div>
+      <div className="flex gap-2 my-3 flex-wrap">{tabs.map(([a, l]) => <button key={a} className="btn" aria-pressed={tab === a} onClick={() => setTab(a)}>{l}</button>)}</div>
       {!s ? <p className="text-sm text-mute">Nothing recorded for this selection.</p> :
         <div className={`grid gap-x-6 ${k === 'both' ? 'sm:grid-cols-2' : ''}`}>
           {k !== 'bowl' && <div><h3 className="text-xs text-mute mb-1">Batting</h3>{Object.entries({ Runs: b.runs, Average: b.avg, 'Strike rate': b.sr, '50s / 100s': b.fifties != null ? `${b.fifties} / ${b.hundreds}` : null, 'High score': b.hs }).map(Row)}</div>}
@@ -308,22 +329,23 @@ function SquadCard({ p, t, onOpen }) {
 }
 
 function TeamPage({ code, format }) {
-  const [d, setD] = useState(null), [seasons, setSeasons] = useState([]), [season, setSeason] = useState(null), [squad, setSquad] = useState(null), [basis, setBasis] = useState(null), [matches, setMatches] = useState([]), [pid, setPid] = useState(null), [err, setErr] = useState(false);
-  useEffect(() => { let on = true; setSeason(null); setSquad(null); setBasis(null); setD(null);
+  const [d, setD] = useState(null), [seasons, setSeasons] = useState([]), [season, setSeason] = useState(null), [squad, setSquad] = useState(null), [basis, setBasis] = useState(null), [matches, setMatches] = useState([]), [pid, setPid] = useState(null), [err, setErr] = useState(''), [tick, setTick] = useState(0);
+  useEffect(() => { let on = true; setSeason(null); setSquad(null); setBasis(null); setD(null); setErr('');
     get(`/api/teams/${code}/seasons${format ? `?format=${format}` : ''}`)
       .then(s => { if (!on) return; setSeasons(s); setSeason(s[0] || 'all'); })
       .catch(() => { if (!on) return; setSeasons([]); setSeason('all'); });
-    return () => { on = false; }; }, [code, format]);
-  useEffect(() => { if (!season) return; let on = true; const q = new URLSearchParams({ season }); if (format) q.set('format', format); setErr(false); setSquad(null); setBasis(null);
-    get(`/api/teams/${code}?${q}`).then(x => on && setD(x)).catch(() => on && setErr(true));
+    return () => { on = false; }; }, [code, format, tick]);
+  useEffect(() => { if (!season) return; let on = true; const q = new URLSearchParams({ season }); if (format) q.set('format', format); setSquad(null); setBasis(null);
+    get(`/api/teams/${code}?${q}`).then(x => { if (on) { setD(x); setErr(''); } }).catch(e => on && setErr(e.message || 'request failed'));
     get(`/api/teams/${code}/matches?${q}`).then(x => on && setMatches(x)).catch(() => on && setMatches([]));
     get(`/api/teams/${code}/squad?${q}`).then(x => { if (on) { setSquad(x.players); setBasis(x.basis); } }).catch(() => on && setSquad([]));
     return () => { on = false; }; }, [code, season, format]);
-  if (err) return <p className="pt-28 text-center text-mute">Couldn't load this team. <a className="text-lime" href="#">Back home</a></p>;
+  if (err) return <div className="pt-28 text-center text-mute space-y-3"><p>Couldn't load this team ({err}).</p>
+    <div className="flex gap-2 justify-center"><button className="btn" onClick={() => setTick(t => t + 1)}>Try again</button><a className="btn" href="#">Back home</a></div></div>;
   if (!d) return <p className="pt-28 text-center text-mute">Loading…</p>;
   const t = d.team, intl = t.league === 'International', label = season === 'all' ? 'all seasons' : season;
   return <main className="max-w-6xl mx-auto px-4 pt-20 pb-20 space-y-8 rise">
-    <a href="#" className="btn">← Home</a>
+    <div className="flex gap-2 flex-wrap"><a href="#" className="btn">← Home</a><BmButton kind="team" refId={t.code} /></div>
     <div className={`card p-6 ${t.champion ? 'champ' : ''}`} style={{ background: `linear-gradient(135deg, ${t.color}2b, transparent 60%)` }}>
       <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="font-display font-extrabold text-3xl md:text-4xl">{t.titles?.length ? '🏆 ' : ''}{t.name}</h1>
         <div className="mt-2"><span className="chip mr-2">{t.league}{format ? ` · ${format}` : ''}</span><Cups years={t.titles} />{t.champion && <span className="chip ml-2 text-gold border-gold/40">Reigning champions{t.champOf?.length ? ` · ${t.champOf.join(', ')}` : ''}</span>}</div></div>
@@ -337,7 +359,7 @@ function TeamPage({ code, format }) {
       <p className="text-xs text-mute mb-3">{basis ? `No lineups are recorded for ${label} yet. Showing ${t.name}'s last ${basis.matches} matches that have lineups (${basis.season}, up to ${basis.last}).` : `Only players who played for ${t.name} in this ${season === 'all' ? 'selection (most appearances first)' : 'season'}. Stats are for these matches.`}</p>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         {squad && !squad.length && <Duck text="Nobody walked out here. Out for a duck!" />}
-        {(squad || []).map((p, i) => <Reveal key={p.name} delay={(i % 4) * 60}><SquadCard p={p} t={t} onOpen={setPid} /></Reveal>)}
+        {(squad || []).map((p, i) => <Reveal key={p.name} delay={(i % 4) * 60}><SquadCard p={p} t={t} onOpen={n => { location.hash = `#/player/${encodeURIComponent(n)}${t.domestic ? '?ctx=domestic' : ''}`; }} /></Reveal>)}
       </div>
     </div>
 
@@ -362,6 +384,184 @@ function WakeNotice() {
   return slow ? <div className="fixed bottom-4 inset-x-4 z-40 mx-auto max-w-md card p-3 text-sm text-center">⏳ Waking up the free-tier server. The first load can take up to a minute.</div> : null;
 }
 
+/* ---------- bookmarks, favourites, search, nav ---------- */
+const BmCtx = createContext({ has: () => false, toggle: () => {}, list: [], uid: '' });
+const useBm = () => useContext(BmCtx);
+const getUid = () => { try { let u = localStorage.getItem('cc_uid');
+  if (!u) { u = crypto.randomUUID ? crypto.randomUUID() : `u${Date.now()}${Math.random().toString(36).slice(2)}`; localStorage.setItem('cc_uid', u); } return u; } catch { return 'guest'; } };
+function BmProvider({ children }) {
+  const uid = getUid(), [data, setData] = useState({ players: [], teams: [] });
+  const refresh = () => get(`/api/bookmarks/${uid}`).then(setData).catch(() => {});
+  useEffect(() => { refresh(); }, []);
+  const list = [...data.players.map(p => ({ kind: 'player', refId: p.name })), ...data.teams.map(t => ({ kind: 'team', refId: t.code }))];
+  const has = (kind, refId) => list.some(b => b.kind === kind && b.refId === refId);
+  const toggle = async (kind, refId) => {
+    const on = has(kind, refId);
+    setData(d => (kind === 'player'
+      ? { ...d, players: on ? d.players.filter(p => p.name !== refId) : [...d.players, { name: refId }] }
+      : { ...d, teams: on ? d.teams.filter(t => t.code !== refId) : [...d.teams, { code: refId, name: refId, color: '#2E86DE', accent: '#14213D', titles: [], league: '' }] }));
+    try { await fetch(`${API}/api/bookmarks`, { method: on ? 'DELETE' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: uid, kind, refId }) }); } catch { /* resync below */ }
+    refresh();                                              // re-sync only after the server has answered
+  };
+  return <BmCtx.Provider value={{ has, toggle, list, data, uid }}>{children}</BmCtx.Provider>;
+}
+
+function BmButton({ kind, refId }) {
+  const { has, toggle } = useBm(), on = has(kind, refId);
+  return <button type="button" className="btn" aria-pressed={on} onClick={e => { e.preventDefault(); e.stopPropagation(); toggle(kind, refId); }}>
+    {kind === 'team' ? (on ? '♥ Favourite' : '♡ Favourite') : (on ? '★ Bookmarked' : '☆ Bookmark')}</button>;
+}
+
+function SearchBox({ onPick }) {
+  const [q, setQ] = useState(''), [res, setRes] = useState([]), [open, setOpen] = useState(false), ref = useRef();
+  useEffect(() => { if (q.trim().length < 2) { setRes([]); return; } let on = true;
+    const t = setTimeout(() => get(`/api/players/search?q=${encodeURIComponent(q.trim())}`).then(x => on && setRes(x)).catch(() => on && setRes([])), 250);
+    return () => { on = false; clearTimeout(t); }; }, [q]);
+  useEffect(() => { const f = e => !ref.current?.contains(e.target) && setOpen(false); document.addEventListener('mousedown', f); return () => document.removeEventListener('mousedown', f); }, []);
+  const pick = () => { setQ(''); setRes([]); setOpen(false); onPick?.(); };
+  return <div ref={ref} className="relative w-full">
+    <input value={q} onChange={e => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} placeholder="Search any player…" aria-label="Search players"
+      className="w-full bg-panel border border-line rounded-full px-4 py-2 text-sm" />
+    {open && q.trim().length >= 2 && <div className="absolute left-0 right-0 mt-2 card p-1 max-h-80 overflow-auto z-40">
+      {res.length ? res.map(p => <a key={p.name + p._id} href={`#/player/${encodeURIComponent(p.name)}`} onClick={pick} className="flex justify-between gap-3 px-3 py-2 rounded-lg hover:bg-line text-sm">
+        <span className="truncate">{p.name}</span><span className="text-xs text-mute shrink-0">{p.team || p.national || ''}{p.role ? ` · ${p.role}` : ''}</span></a>)
+        : <div className="px-3 py-2 text-sm text-mute">No players found. Try the surname.</div>}</div>}
+  </div>;
+}
+
+function NavBar() {
+  const [open, setOpen] = useState(false), { list } = useBm(), close = () => setOpen(false);
+  const links = [['#', 'Home'], ['#/matches', 'Matches'], ['#/bookmarks', `Bookmarks${list.length ? ` (${list.length})` : ''}`]];
+  return <header className="sticky top-0 z-30 backdrop-blur bg-bg/85 border-b border-line">
+    <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-4">
+      <a href="#" className="font-display font-extrabold text-lg shrink-0">Crease Club</a>
+      <div className="hidden md:block flex-1 max-w-md"><SearchBox /></div>
+      <nav className="hidden md:flex items-center gap-6 ml-auto text-sm text-mute">{links.map(([h, l]) => <a key={h} href={h} className="hover:text-ink">{l}</a>)}</nav>
+      <button className="md:hidden ml-auto btn !px-3" aria-label="Menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">{open ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}</svg></button></div>
+    {open && <div className="md:hidden border-t border-line px-4 py-3 space-y-3"><SearchBox onPick={close} />
+      {links.map(([h, l]) => <a key={h} href={h} onClick={close} className="block py-1">{l}</a>)}</div>}
+  </header>;
+}
+
+/* ---------- player page ---------- */
+const TABS = [['Test', 'Test'], ['ODI', 'ODI'], ['T20', 'T20I'], ['League', 'IPL / WPL'], ['Domestic', 'Domestic']];
+const cellsFor = (s, kind) => { const b = s?.bat || {}, w = s?.bowl || {};
+  return [['M', s?.m],
+    ...(kind !== 'bowl' ? [['Runs', b.runs], ['Avg', b.avg], ['SR', b.sr], ['100/50', b.hundreds != null ? `${b.hundreds}/${b.fifties}` : null], ['HS', b.hs]] : []),
+    ...(kind !== 'bat' ? [['Wkts', w.wkts], ['Econ', w.econ], ['Bowl avg', w.avg], ['Best', w.best]] : [])]; };
+function StatTable({ rows, kind, first }) {
+  const head = cellsFor(null, kind).map(c => c[0]);
+  return <div className="overflow-x-auto"><table className="w-full text-sm min-w-[32rem]"><thead><tr className="text-left text-[11px] text-mute">
+    <th className="py-2 pr-3 font-medium">{first}</th>{head.map(h => <th key={h} className="py-2 px-2 font-medium text-right">{h}</th>)}</tr></thead>
+    <tbody>{rows.map(([label, s, strong]) => <tr key={label} className={`border-t border-line ${strong ? 'text-lime font-semibold' : ''}`}>
+      <td className="py-2 pr-3 whitespace-nowrap">{label}</td>{cellsFor(s, kind).map(([h, v]) => <td key={h} className="py-2 px-2 text-right tabular-nums">{v ?? '–'}</td>)}</tr>)}</tbody></table></div>;
+}
+
+function PlayerPage({ name, ctx }) {
+  const [p, setP] = useState(null), [err, setErr] = useState(false), [tab, setTab] = useState(null), [yr, setYr] = useState('career'), [badges, setBadges] = useState([]);
+  const dom = ctx === 'domestic', lab = k => TABS.find(x => x[0] === k)?.[1] ?? k;
+  useEffect(() => { let on = true; setP(null); setErr(false); setTab(null); setYr('career'); setBadges([]);
+    get(`/api/players/by-name/${encodeURIComponent(name)}`).then(x => { if (!on) return; setP(x); get(`/api/players/${x._id}/badges`).then(b => on && setBadges(b)).catch(() => {}); }).catch(() => on && setErr(true));
+    return () => { on = false; }; }, [name]);
+  const allTabs = p ? TABS.filter(([k]) => p.stats?.[k] && (!dom || k === 'Domestic')) : [];
+  const years = p ? [...new Set(Object.keys(p.years || {}).filter(y => allTabs.some(([k]) => p.years[y]?.[k])))].sort().reverse() : [];
+  const tabs = allTabs.filter(([k]) => yr === 'career' || p?.years?.[yr]?.[k]), tabKey = tabs.map(x => x[0]).join();
+  useEffect(() => { if (tabs.length && !tabs.some(([k]) => k === tab)) setTab(tabs[0][0]); }, [tabKey, tab]);
+  if (err) return <p className="pt-24 text-center text-mute">Couldn't find that player. <a className="text-lime" href="#">Back home</a></p>;
+  if (!p) return <p className="pt-24 text-center text-mute">Loading…</p>;
+  const t = p.teamDoc || { color: '#2E86DE', accent: '#14213D', name: '' }, kind = kindOf(p.role);
+  const s = tab ? (yr === 'career' ? p.stats?.[tab] : p.years?.[yr]?.[tab]) : null;
+  const best = tab ? (yr === 'career' ? p.best?.[tab] : p.bestY?.[yr]?.[tab]) : null;
+  const rows = tab ? [['Career', p.stats[tab], yr === 'career'], ...Object.keys(p.years || {}).filter(y => p.years[y]?.[tab]).sort().reverse().map(y => [y, p.years[y][tab], yr === y])] : [];
+  const when = yr === 'career' ? 'career' : yr;
+  return <main className="max-w-6xl mx-auto px-4 pt-8 pb-20 space-y-6 rise">
+    <div className="flex gap-2 flex-wrap"><a href="#" className="btn">← Home</a>{dom && <a href={`#/player/${encodeURIComponent(name)}`} className="btn">Show all formats</a>}</div>
+    <div className="card p-6" style={{ background: `linear-gradient(135deg, ${t.color}2b, transparent 60%)` }}>
+      <div className="flex flex-wrap items-center gap-5"><PixelAvatar name={p.name} color={t.color} accent={t.accent} size={88} />
+        <div className="min-w-0 flex-1"><h1 className="font-display font-extrabold text-3xl">{p.name}</h1>
+          <p className="text-mute text-sm mt-1">{p.role}{t.name ? ` · ${t.name}` : ''}{dom ? ' · Domestic view' : ''}</p><Tags p={p} />
+          {badges.length > 0 && <div className="flex gap-2 flex-wrap mt-2">{badges.map(x => <span key={x} className="chip text-gold border-gold/40">{x}</span>)}</div>}</div>
+        <div className="flex flex-col items-end gap-3"><BmButton kind="player" refId={p.name} />
+          <div className="text-right"><div className="font-pixel text-3xl text-lime">{p.impact}</div><div className="text-[10px] text-mute">IMPACT</div></div></div></div>
+      <p className="text-[11px] text-mute mt-4">Ball-by-ball records held: {p.first?.slice(0, 4)}–{p.last?.slice(0, 4)}. Matches outside the dataset aren't counted, so totals for older careers are lower than official figures.</p>
+      {dom && p.domThrough && <p className="text-[11px] text-gold mt-2">Domestic match data in the dataset runs through {p.domThrough}, so later seasons are not counted.</p>}
+      </div>
+      
+    {!p.years && <div className="card p-4 text-sm text-gold">This player was saved with the old format. Run <code>npm run import:all</code> in <code>server/</code> to build year-wise stats and best knocks.</div>}
+    {!tab ? <div className="grid"><Duck text={dom ? 'No domestic matches recorded for this player.' : 'No recorded matches for this player yet.'} /></div> : <>
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="text-xs text-mute">Year</label>
+        <select value={yr} onChange={e => setYr(e.target.value)} className="bg-bg border border-line rounded-full px-3 py-2 text-sm"><option value="career">Career</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
+        <div className="flex gap-2 flex-wrap">{tabs.map(([k, l]) => <button key={k} className="btn" aria-pressed={tab === k} onClick={() => setTab(k)}>{l}</button>)}</div></div>
+
+      <div className="card p-5"><h2 className="font-display font-bold text-lg mb-2">{yr === 'career' ? 'Career' : yr} · {lab(tab)}</h2>
+        {s ? <StatTable first="Period" kind={kind} rows={[[yr === 'career' ? 'Career' : yr, s, true]]} /> : <p className="text-sm text-mute">Nothing recorded for this selection.</p>}</div>
+
+      {kind === 'bowl' ? <div className="card p-5"><h2 className="font-display font-bold text-lg">Best bowling · {when}</h2>
+          <p className="font-pixel text-2xl text-lime mt-2">{s?.bowl?.best ?? '–'}</p><p className="text-xs text-mute mt-1">Wickets/runs in an innings. Batting knocks aren't shown for bowlers.</p></div>
+        : best ? <div className="card p-5"><div className="flex flex-wrap items-baseline gap-x-4 gap-y-1"><h2 className="font-display font-bold text-lg">Best knock · {when}</h2>
+            <span className="font-pixel text-2xl text-lime">{best.runs}{best.out ? '' : '*'}</span>
+            <span className="text-mute text-sm">off {best.balls} balls{best.balls ? ` · SR ${Math.round(best.runs / best.balls * 100)}` : ''}</span></div>
+          <p className="text-xs text-mute mt-1">{fmtDate(best.date)} · v {best.opp}{best.venue ? ` · ${best.venue}` : ''}{best.result ? ` · ${best.result}` : ''}{best.event ? ` · ${best.event}` : ''}</p>
+          <div className="grid sm:grid-cols-2 gap-6 mt-4">
+            <div><h3 className="text-xs text-lime mb-2">STRENGTHS IN THIS INNINGS</h3><ul className="space-y-2 text-sm">{best.strengths?.map(x => <li key={x}>✅ {x}</li>)}</ul></div>
+            <div><h3 className="text-xs text-gold mb-2">WEAKNESSES IN THIS INNINGS</h3><ul className="space-y-2 text-sm">{best.weaknesses?.map(x => <li key={x}>⚠️ {x}</li>)}</ul></div></div>
+          <p className="text-[11px] text-mute mt-4">Derived from the ball-by-ball record (runs, dot balls, boundaries, over phases, bowlers faced). It has no shot direction or bowler-type data.</p></div>
+        : <div className="card p-5 text-sm text-mute">No batting innings recorded for this selection.</div>}
+
+      <div className="card p-5"><h2 className="font-display font-bold text-lg mb-2">Year by year · {lab(tab)}</h2><StatTable first="Year" kind={kind} rows={rows} /></div>
+    </>}
+  </main>;
+}
+
+function BookmarksPage() {
+  const { data, toggle } = useBm();
+  return <main className="max-w-6xl mx-auto px-4 pt-8 pb-20 space-y-12 rise">
+    <div><h1 className="font-display font-extrabold text-3xl">Bookmarks</h1><p className="text-mute text-sm mt-1">Saved in this browser. There's no login, so another device has its own list.</p></div>
+    <section className="space-y-5"><h2 className="font-display font-bold text-lg">Favourite teams</h2>
+      {!data.teams.length && <div className="grid"><Duck text="No favourite teams yet. Open a team and tap ♡ Favourite." /></div>}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 items-start">{data.teams.map(t => <div key={t.code} className="flex flex-col gap-3">
+        <TeamCard t={t} fit /><button className="btn w-full" onClick={() => toggle('team', t.code)}>Remove</button></div>)}</div></section>
+    <section className="space-y-5"><h2 className="font-display font-bold text-lg">Saved players</h2>
+      {!data.players.length && <div className="grid"><Duck text="No saved players yet. Search a player and tap ☆ Bookmark." /></div>}
+      {data.players.length > 0 && <div className="card px-4">{data.players.map(p => <div key={p.name} className="flex items-center justify-between gap-3 py-3 border-b border-line last:border-0">
+        <a href={`#/player/${encodeURIComponent(p.name)}`} className="min-w-0 hover:text-lime"><span className="font-display font-bold">{p.name}</span><span className="text-xs text-mute ml-2">{p.team || p.national || ''}{p.role ? ` · ${p.role}` : ''}</span></a>
+        <button className="btn" onClick={() => toggle('player', p.name)}>Remove</button></div>)}</div>}</section>
+  </main>;
+}
+
+const COMP_OPTS = [['ipl', 'IPL · Men'], ['wpl', 'WPL · Women'], ['ind-men', "India · Men's internationals"], ['ind-women', "India · Women's internationals"]];
+function MatchesPage({ teams }) {
+  const [comp, setComp] = useState('ipl'), [years, setYears] = useState([]), [year, setYear] = useState(''), [ms, setMs] = useState(null);
+  const nameOf = c => teams.find(t => t.code === c)?.name || c;
+  useEffect(() => { let on = true; setYears([]); setYear(''); setMs(null);
+    get(`/api/matches/years?comp=${comp}`).then(y => { if (on) { setYears(y); setYear(y[0] || ''); if (!y.length) setMs([]); } }).catch(() => on && setMs([]));
+    return () => { on = false; }; }, [comp]);
+  useEffect(() => { if (!year) return; let on = true; setMs(null);
+    get(`/api/matches?comp=${comp}&year=${year}`).then(x => on && setMs(x)).catch(() => on && setMs([]));
+    return () => { on = false; }; }, [comp, year]);
+  const Side = ({ code, c }) => <div className="min-w-0"><div className="text-xs text-mute mb-1">{nameOf(code)}</div>
+    {c?.bat && <div className="text-sm">🏏 {c.bat.name} <b>{c.bat.runs}{c.bat.out ? '' : '*'}</b> <span className="text-mute">({c.bat.balls})</span></div>}
+    {c?.bowl && <div className="text-sm">🎯 {c.bowl.name} <b>{c.bowl.wk}/{c.bowl.conc}</b> <span className="text-mute">({Math.floor(c.bowl.ob / 6)}.{c.bowl.ob % 6} ov)</span></div>}
+    {!c?.bat && !c?.bowl && <div className="text-xs text-mute">No lineup recorded.</div>}</div>;
+  const result = m => (m.winner ? `${nameOf(m.winner)} won ${(m.margin || '').replace(/^(T20|ODI|Test) · /, '')}` : (m.margin || 'No result'));
+  return <main className="max-w-6xl mx-auto px-4 pt-8 pb-20 space-y-6 rise">
+    <div><h1 className="font-display font-extrabold text-3xl">Match summaries</h1><p className="text-mute text-sm mt-1">Every result with venue and the key performers. Pick a competition and a year.</p></div>
+    <div className="flex gap-3 flex-wrap">
+      <select value={comp} onChange={e => setComp(e.target.value)} className="bg-bg border border-line rounded-full px-3 py-2 text-sm min-w-[14rem]">{COMP_OPTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+      <select value={year} onChange={e => setYear(e.target.value)} disabled={!years.length} className="bg-bg border border-line rounded-full px-3 py-2 text-sm">{years.map(y => <option key={y}>{y}</option>)}</select>
+      {ms && <span className="text-xs text-mute self-center">{ms.length} matches</span>}</div>
+    {ms === null && <p className="text-sm text-mute">Loading…</p>}
+    {ms?.length === 0 && <div className="grid"><Duck text="No matches recorded for this selection." /></div>}
+    {ms?.length > 0 && <div className="card px-4">{ms.map(m => <details key={m.key || m.date + m.teamA} className="border-b border-line last:border-0 py-3">
+      <summary className="cursor-pointer flex flex-wrap justify-between gap-x-4 gap-y-1 text-sm"><span><span className="text-mute">{fmtShort(m.date)}</span> · <b>{nameOf(m.teamA)} v {nameOf(m.teamB)}</b>{m.stage ? <span className="chip ml-2">{m.stage}</span> : null}</span>
+        <span className="text-mute">{result(m)}</span></summary>
+      <p className="text-xs text-mute mt-3">{m.venue || 'Venue not recorded'}{m.playerOfMatch ? ` · Player of the match: ${m.playerOfMatch}` : ''}</p>
+      <div className="grid sm:grid-cols-2 gap-5 mt-3"><Side code={m.teamA} c={m.a} /><Side code={m.teamB} c={m.b} /></div></details>)}</div>}
+  </main>;
+}
+
 /* ---------- app ---------- */
 export default function App() {
   const hash = useHash(), rt = route(hash), [ready, setReady] = useState(!!rt), [teams, setTeams] = useState([]), [live, setLive] = useState([]);
@@ -369,12 +569,16 @@ export default function App() {
   useEffect(() => { document.body.style.overflow = ready ? '' : 'hidden'; }, [ready]);
   useEffect(() => { get('/api/teams?domestic=false').then(setTeams).catch(() => {}); }, []);
   useEffect(() => { const load = () => get('/api/live').then(setLive).catch(() => {}); load(); const t = setInterval(load, 60000); return () => clearInterval(t); }, []);
-  return <div className="min-h-screen">
-    <WakeNotice />
-    <header className="absolute top-0 inset-x-0 z-20"><div className="max-w-6xl mx-auto px-4 h-14 flex items-center"><a href="#" className="font-display font-extrabold text-lg">Crease Club</a></div></header>
-    {rt ? <TeamPage code={rt.code} format={rt.format} /> : <>
-      <Hero ready={ready} live={live} />
-      {ready && <main className="rise max-w-6xl mx-auto px-4 pb-24 space-y-24"><IplSection teams={teams} /><Quip n={0} /><IntlSection teams={teams} /><Quip n={1} /><LiveSection live={live} /><DomesticSection /><Quip n={2} /><Crystal teams={teams} /></main>}</>}
+  return <BmProvider><div className="min-h-screen">
+    {typeof WakeNotice === 'function' && <WakeNotice />}
+    <NavBar />
+      {rt?.type === 'team' ? <TeamPage code={rt.code} format={rt.format} />
+      : rt?.type === 'player' ? <PlayerPage name={rt.name} ctx={rt.ctx} />
+      : rt?.type === 'matches' ? <MatchesPage teams={teams} />
+      : rt?.type === 'bookmarks' ? <BookmarksPage />
+      : <>
+        <Hero ready={ready} live={live} />
+        {ready && <main className="rise max-w-6xl mx-auto px-4 pb-24 space-y-24"><IplSection teams={teams} /><Quip n={0} /><IntlSection teams={teams} /><Quip n={1} /><LiveSection live={live} /><DomesticSection /><Quip n={2} /><Crystal teams={teams} /></main>}</>}
     {(ready || rt) && <Footer />}
-  </div>;
+  </div></BmProvider>;
 }

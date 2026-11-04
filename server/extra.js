@@ -39,3 +39,12 @@ extra.get('/api/players/:id/badges', wrap(async (q, r) => {
   if (p.recent.filter(x => x >= 50).length >= 3) b.push('Purple Patch');
   r.json(b);
 }));
+extra.get('/api/players/search', wrap(async (q, r) => {
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const toks = String(q.query.q || '').trim().split(/\s+/).filter(Boolean).map(esc);
+  if (!toks.length || toks.join('').length < 2) return r.json([]);
+  const sur = toks[toks.length - 1];
+  let rows = await Player.find({ name: { $regex: toks.length === 1 ? sur : `(^|\\s)${sur}`, $options: 'i' } }, 'name team national role matches').sort({ matches: -1 }).limit(60).lean();
+  if (toks.length > 1) rows = rows.filter(p => p.name[0].toLowerCase() === toks[0][0].toLowerCase() || p.name.toLowerCase().includes(toks[0].toLowerCase()));
+  r.json(rows.slice(0, 12));
+}));

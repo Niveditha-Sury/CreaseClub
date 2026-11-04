@@ -10,7 +10,12 @@
     "update:data": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update-data.ps1 && node --max-old-space-size=4096 scripts/importCricsheet.js",
     "probe": "node scripts/probe.js",
     "start": "node index.js",
-    "reset:live": "node scripts/resetLive.js"
+    "reset:live": "node scripts/resetLive.js",
+    "probe:player": "node scripts/probePlayer.js",
+    "probe:elite": "node scripts/probeElite.js",
+    "import:elite": "node scripts/importEliteFile.js",
+    "elite:sync": "node scripts/eliteSync.js",
+    "prune:live": "node scripts/pruneLive.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

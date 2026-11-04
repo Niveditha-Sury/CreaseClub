@@ -4,7 +4,7 @@ import { Match } from './models.js';
 let cache = { at: 0, data: null };
 export async function ratingsFromMatches(K = 24) {
   if (cache.data && Date.now() - cache.at < 300000) return cache.data;
-  const ms = (await Match.find({ status: { $nin: ['live', 'upcoming'] } }, 'date teamA teamB winner venue').lean())
+  const ms = (await Match.find({ status: { $nin: ['live', 'upcoming', 'pending'] } }, 'date teamA teamB winner venue').lean())
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   const r = {}, hist = {}, venue = {};
   for (const m of ms) {

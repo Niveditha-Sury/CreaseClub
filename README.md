@@ -29,26 +29,32 @@ Playing XIs · year-wise player stats · Elo win predictor · live and upcoming 
 ## ✨ What it does
 | | |
 |---|---|
+| 🔎 **Player search and pages** | Search any player from the nav bar. Career stats across formats, calendar-year tables, and a best-knock breakdown with strengths and weaknesses derived from the ball-by-ball record |
 | 🏆 **IPL and WPL** | Franchise cards with trophy badges and a men's/women's filter |
 | 🌏 **India internationals** | Test, ODI and T20I records for men and women, with per-format team pages |
-| 🏟️ **Domestic cricket** | Pick a tournament (Ranji, Vijay Hazare, SMAT, women's trophies and more) to see its teams, champions and upcoming fixtures |
-| 📡 **Live and upcoming** | Matches in play now and fixtures in the next 5 days, with one-click predictions |
-| 👥 **Team pages** | Season filter, record, venue form, **squads built from real lineups**, and a match lookback with every player's runs, wickets and impact |
-| 🧑 **Player cards** | Role-aware stats (batting, bowling or both), position tags and a **year-by-year** dropdown |
-| 🔮 **Crystal Ball** | Win probability from Elo rating, recent form, toss and venue |
+| 🏟️ **Domestic cricket** | Pick a tournament (Ranji, Vijay Hazare, SMAT, women's trophies and more) to see its teams, per-tournament champions and upcoming fixtures |
+| 🗂️ **Match summaries** | Every result with venue and key performers, by competition (IPL, WPL, India men, India women) and year |
+| 📡 **Live and upcoming** | Matches in play and fixtures for the next 5 days, checked against two feeds where possible |
+| ⭐ **Bookmarks and favourites** | Save players and teams (stored per browser, no login) |
+| 🔮 **Crystal Ball** | Win probability from Elo, recent form, toss and venue |
+| 📱 **Responsive** | Nav bar collapses into a hamburger menu on small screens |
 
 ## 🧱 Architecture
+
 ```mermaid
 flowchart LR
   CS[Cricsheet ball-by-ball JSON] --> IMP[Import pipeline]
-  API[CricketData.org] --> SYNC[Live and series sync]
+  CD[CricketData.org] --> SYNC[Live and series sync]
+  ES[EliteSport API] --> VER[Verification and gap-filling]
   IMP --> DB[(MongoDB Atlas)]
   SYNC --> DB
+  VER --> DB
   DB --> EXP[Express API]
   EXP --> UI[React app]
   GH[GitHub Actions] -- twice daily --> IMP
   GH -- on push --> UI
 ```
+
 | Layer | Tech | Hosted on |
 |---|---|---|
 | Frontend | React, Vite, Tailwind CSS, SCSS | GitHub Pages |
@@ -89,8 +95,9 @@ On macOS or Linux, download the Cricsheet zips into `data/` yourself and run `np
 | Variable | Where | Purpose |
 |---|---|---|
 | `MONGO_URI` | server | MongoDB connection string |
-| `CRICKETDATA_KEY` | server | CricketData.org key for live and upcoming fixtures (optional) |
-| `ELITESPORT_BASE_URL`, `ELITESPORT_KEY` | server | Optional second feed. It's a scaffold and needs its response mapped before use |
+| `CRICKETDATA_KEY` | server | CricketData.org key (live and upcoming fixtures, domestic series). Free plan: 100 calls a day |
+| `ELITESPORT_KEY`, `ELITESPORT_BASE_URL` | server | EliteSport key and host (second feed). Free plan: 500 calls in total |
+| `ELITE_DAILY` | server | Max EliteSport calls per day (default 3) |
 | `VITE_API_URL` | client build | Public URL of the API (set from the repo variable `API_URL`) |
 | `VITE_BASE` | client build | Base path for GitHub Pages (set automatically in CI) |
 </details>
@@ -103,35 +110,37 @@ On macOS or Linux, download the Cricsheet zips into `data/` yourself and run `np
 | `npm run import:all` | Rebuild matches, players, teams and honours from `data/` |
 | `npm run update:data` | Download fresh Cricsheet zips, then import |
 | `npm run audit` | Counts and duplicate check |
-| `npm run finals` | Show the finals found for a tournament |
-| `npm run probe` | Check which tournaments the live API carries |
+| `npm run probe` | Check which tournaments CricketData carries |
+| `npm run probe:elite` | Save raw EliteSport responses to `server/samples/` (3 calls) |
 | `npm run reset:live` | Remove API-sourced matches so they refill cleanly |
+| `GET /api/quota` | Current API usage against both budgets |
 </details>
 
 ## ☁️ Deploy
 1. **Database:** create a free MongoDB Atlas cluster and allow network access from your host and from GitHub Actions.
-2. **API:** create a Web Service on Render. Root `server`, build `npm install`, start `npm start`. Add `MONGO_URI` and optionally `CRICKETDATA_KEY`.
+2. **API:** create a Web Service on Render. Root `server`, build `npm install`, start `npm start`. Add `MONGO_URI` and optionally the two API keys.
 3. **Site:** in the repo, set Settings → Pages → Source to **GitHub Actions**. Add the variable `API_URL` (your API's URL, no trailing slash) and the secret `MONGO_URI`.
-4. Push to `main`. **Deploy site** publishes the app, and **Refresh data** re-imports Cricsheet data twice a day (you can also run it by hand from the Actions tab).
+4. Push to `main`. **Deploy site** publishes the app, and **Refresh data** re-imports Cricsheet data twice a day.
 
 ## 🗺️ Roadmap
 - [ ] Batter-vs-bowler matchups from ball-by-ball data
 - [ ] A trained win-probability model, back-tested against past matches
-- [ ] Lineups and player stats for the domestic tournaments Cricsheet doesn't publish
-- [ ] Auth and a saved-players page
-- [ ] Static snapshot mode for fully serverless hosting
+- [ ] Official career totals for veteran players whose early matches predate the dataset
+- [ ] Lineups and player stats for domestic tournaments the dataset doesn't publish
+- [ ] Auth, so bookmarks follow you across devices
 
 ## ⚠️ Known limitations
+- The ball-by-ball dataset only covers part of older careers, so veterans' totals are lower than official figures. The player page states the years covered.
+- Strengths and weaknesses are rule-based summaries of the ball-by-ball record. The data has no shot direction or bowler type.
 - Jersey numbers are generated, because the data has none.
-- Ranji Trophy, Vijay Hazare and similar tournaments have fixtures and results only when the live API carries them, and they have no lineups.
-- Year-wise figures are built from match totals, so Test innings are combined per match.
-- New results can lag by up to a day, until the next data refresh.
+- Tournaments such as the Ranji Trophy have fixtures and results only when a live feed carries them, with no lineups.
+- New results can lag by up to a day. Bookmarks are stored per browser, not per account.
 
 ## 🙏 Credits
-Ball-by-ball data from [Cricsheet](https://cricsheet.org). Live fixtures from [CricketData.org](https://cricketdata.org). Please check each provider's licence before reusing their data.
+Ball-by-ball data from [Cricsheet](https://cricsheet.org). Live fixtures from [CricketData.org](https://cricketdata.org) and [EliteSport](https://elitesportapi.com). Please check each provider's licence before reusing their data.
 
 ## 📄 License
-MIT. Not affiliated with the BCCI, IPL, WPL or ICC.
+MIT. Not affiliated with the BCCI, IPL, WPL or ICC
 
 <div align="center">
 
