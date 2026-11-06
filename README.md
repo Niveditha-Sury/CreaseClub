@@ -6,9 +6,9 @@
 
 Playing XIs · year-wise player stats · Elo win predictor · live and upcoming fixtures
 
-[![Live Demo](https://img.shields.io/badge/LIVE%20DEMO-open-b8f26b?style=for-the-badge&logo=github&logoColor=black)](https://<you>.github.io/<repo>/)
-[![Deploy](https://github.com/<you>/<repo>/actions/workflows/deploy.yml/badge.svg)](https://github.com/<you>/<repo>/actions/workflows/deploy.yml)
-[![Data refresh](https://github.com/<you>/<repo>/actions/workflows/data-refresh.yml/badge.svg)](https://github.com/<you>/<repo>/actions/workflows/data-refresh.yml)
+[![Live Demo](https://img.shields.io/badge/LIVE%20DEMO-open-b8f26b?style=for-the-badge&logo=github&logoColor=black)](https://Niveditha-Sury.github.io/CreaseClub/)
+[![Deploy](https://github.com/Niveditha-Sury/CreaseClub/actions/workflows/deploy.yml/badge.svg)](https://github.com/Niveditha-Sury/CreaseClub/actions/workflows/deploy.yml)
+[![Data refresh](https://github.com/Niveditha-Sury/CreaseClub/actions/workflows/data-refresh.yml/badge.svg)](https://github.com/<you>/CreaseClub/actions/workflows/data-refresh.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-f4b400)](LICENSE)
 
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
@@ -19,12 +19,13 @@ Playing XIs · year-wise player stats · Elo win predictor · live and upcoming 
 ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?logo=mongodb&logoColor=white)
 ![GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 
-<!-- Add a 15-20 second screen recording here: docs/demo.gif -->
-<img src="docs/demo.gif" alt="Crease Club demo" width="780">
+
+<img width="1169" height="621" alt="creaseclub" src="https://github.com/user-attachments/assets/10bdd057-967f-4913-ace8-04f52c5bc691" />
+
 
 </div>
 
-> The free-tier API sleeps when idle, so the **first load of the live demo can take up to a minute**. The GIF above shows the full flow.
+> The free-tier API sleeps when idle, so the **first load of the live demo can take up to a minute**. 
 
 ## ✨ What it does
 | | |
@@ -144,6 +145,6 @@ MIT. Not affiliated with the BCCI, IPL, WPL or ICC
 
 <div align="center">
 
-Built by **Niveditha Sury** · [LinkedIn](https://www.linkedin.com/in/<your-profile>) · [GitHub](https://github.com/<you>)
+Built by **Niveditha Sury** · [LinkedIn](https://www.linkedin.com/in/niveditha-s-bb7667324) · [GitHub](https://github.com/Niveditha-Sury)
 
 </div>
