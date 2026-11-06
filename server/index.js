@@ -24,23 +24,34 @@ app.get('/api/teams/:code/seasons', wrap(async (q, r) => {
   r.json(Object.keys(last).sort((a, b) => (last[a] < last[b] ? 1 : -1)));
 }));
 
-// Squad = players from the lineups of this team's matches. If the season has no lineups (API-only fixtures),
-// fall back to the team's latest matches that do, and say so via `basis`.
-const squadFrom = async (ms, code, limit) => {
+// Career totals up to (and including) a calendar year, summed from the player's year-wise records.
+const careerTo = (years, tabs, through) => {
+  const A = { m: 0, runs: 0, balls: 0, outs: 0, inns: 0, wkts: 0, bRuns: 0, bBalls: 0 };
+  for (const [y, byTab] of Object.entries(years || {})) if (+y <= through) for (const k of tabs) { const s = byTab[k]; if (!s) continue;
+    A.m += s.m || 0; A.runs += s.bat?.runs || 0; A.balls += s.bat?.balls || 0; A.outs += s.bat?.outs || 0; A.inns += s.bat?.inns || 0;
+    A.wkts += s.bowl?.wkts || 0; A.bRuns += s.bowl?.runs || 0; A.bBalls += s.bowl?.balls || 0; }
+  return { m: A.m, runs: A.runs, wkts: A.wkts, avg: A.balls ? +(A.runs / (A.outs || 1)).toFixed(1) : null,
+    sr: A.balls ? +(A.runs / A.balls * 100).toFixed(1) : null, econ: A.bBalls ? +(A.bRuns / (A.bBalls / 6)).toFixed(2) : null };
+};
+const squadFrom = async (ms, code, limit, tabs, through) => {
   const P = {};
   for (const m of ms) for (const x of (m.teamA === code ? m.xiA : m.xiB) || []) {
     const p = (P[x.name] ??= { name: x.name, matches: 0, runs: 0, balls: 0, outs: 0, wkts: 0, conc: 0, ob: 0, imp: 0 });
     p.matches++; p.runs += x.runs || 0; p.balls += x.balls || 0; if (x.out) p.outs++; p.wkts += x.wk || 0; p.conc += x.conc || 0; p.ob += x.ob || 0; p.imp += x.impact || 0; }
-  const docs = await Player.find({ name: { $in: Object.keys(P) } }, 'name role slot keeper captain jersey').lean(), by = {}; docs.forEach(d => { by[d.name] ??= d; });
+  const docs = await Player.find({ name: { $in: Object.keys(P) } }, 'name role slot keeper captain jersey years').lean(), by = {}; docs.forEach(d => { by[d.name] ??= d; });
   return Object.values(P).map(p => { const d = by[p.name], sh = p.ob / ((p.ob + p.balls) || 1);
-    return { name: p.name,id: d ? d.name : null, jersey: d?.jersey ?? null, slot: d?.slot ?? null, keeper: !!d?.keeper, captain: !!d?.captain,
+    return { name: p.name, id: d ? d.name : null, jersey: d?.jersey ?? null, slot: d?.slot ?? null, keeper: !!d?.keeper, captain: !!d?.captain,
       role: d?.role || (sh > 0.6 ? 'Bowler' : sh > 0.25 ? 'All-rounder' : 'Batter'), matches: p.matches, runs: p.runs, wkts: p.wkts,
       avg: p.outs ? +(p.runs / p.outs).toFixed(1) : p.runs || null, sr: p.balls ? +(p.runs / p.balls * 100).toFixed(1) : null,
-      econ: p.ob ? +(p.conc / (p.ob / 6)).toFixed(2) : null, impact: Math.round(Math.min(99, p.imp / p.matches * 14)) }; })
+      econ: p.ob ? +(p.conc / (p.ob / 6)).toFixed(2) : null, impact: Math.round(Math.min(99, p.imp / p.matches * 14)),
+      career: d?.years ? careerTo(d.years, tabs, through) : null }; })
     .sort((a, b) => b.matches - a.matches || b.runs - a.runs).slice(0, limit);
 };
 app.get('/api/teams/:code/squad', wrap(async (q, r) => {
   const code = q.params.code, all = !q.query.season || q.query.season === 'all', P = 'teamA teamB xiA xiB date season';
+  const t = await Team.findOne({ code }, 'league').lean();
+  const tabs = t?.league === 'IPL' || t?.league === 'WPL' ? ['League'] : t?.league === 'Domestic' ? ['Domestic'] : q.query.format ? [q.query.format] : ['Test', 'ODI', 'T20'];
+  const s0 = String(q.query.season || ''), through = all ? 9999 : +s0.slice(0, 4) + (s0.includes('/') ? 1 : 0);   // "2025/26" runs into 2026
   let ms = await Match.find(filt(code, q.query), P).lean(), basis = null;
   if (!ms.some(m => (m.teamA === code ? m.xiA : m.xiB)?.length)) {
     const f = { $and: [{ $or: [{ teamA: code }, { teamB: code }] }, { $or: [{ 'xiA.0': { $exists: true } }, { 'xiB.0': { $exists: true } }] }], status: DONE };
@@ -48,7 +59,7 @@ app.get('/api/teams/:code/squad', wrap(async (q, r) => {
     ms = await Match.find(f, P).sort({ date: -1 }).limit(8).lean();
     basis = ms.length ? { season: ms[0].season, matches: ms.length, last: ms[0].date } : null;
   }
-  r.json({ players: await squadFrom(ms, code, basis ? 16 : all ? 24 : 30), basis });
+  r.json({ players: await squadFrom(ms, code, basis ? 16 : all ? 24 : 30, tabs, basis ? 9999 : through), basis });
 }));
 
 app.get('/api/teams/:code', wrap(async (q, r) => {

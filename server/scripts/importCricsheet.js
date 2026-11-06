@@ -193,9 +193,9 @@ const arr = [...docs.values()];
 const maxYr = f => Math.max(0, ...arr.filter(f).map(d => yr(d.date)));
 const maxClub = maxYr(d => d.league === 'IPL' || d.league === 'WPL'), maxNat = maxYr(d => d.league === 'International');
 const fin = b => ({ m: b.m,
-  bat: { runs: b.bat.runs, inns: b.bat.inns, avg: b.bat.inns ? r2(b.bat.runs / (b.bat.out || 1)) : null, sr: b.bat.balls ? r2(b.bat.runs / b.bat.balls * 100) : null,
+  bat: { runs: b.bat.runs, balls: b.bat.balls, outs: b.bat.out, inns: b.bat.inns, avg: b.bat.inns ? r2(b.bat.runs / (b.bat.out || 1)) : null, sr: b.bat.balls ? r2(b.bat.runs / b.bat.balls * 100) : null,
     fifties: b.bat.f, hundreds: b.bat.h, hs: b.bat.inns ? `${b.bat.hs}${b.bat.hsNo ? '*' : ''}` : '-' },
-  bowl: { wkts: b.bowl.wk, econ: b.bowl.balls ? r2(b.bowl.runs / (b.bowl.balls / 6)) : null, avg: b.bowl.wk ? r2(b.bowl.runs / b.bowl.wk) : null,
+  bowl: { wkts: b.bowl.wk, runs: b.bowl.runs, balls: b.bowl.balls, econ: b.bowl.balls ? r2(b.bowl.runs / (b.bowl.balls / 6)) : null, avg: b.bowl.wk ? r2(b.bowl.runs / b.bowl.wk) : null,
     best: b.bowl.balls ? `${b.bowl.bw}/${b.bowl.br}` : '-' } });
 const byDate = (a, b) => (a[0] < b[0] ? -1 : 1);
 const players = Object.values(A).map(p => {

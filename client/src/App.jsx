@@ -316,16 +316,18 @@ const XiLine = x => <div key={x.name} className="flex justify-between gap-3 py-1
     <span className="ml-2 text-lime" title="Impact score">{Number(x.impact).toFixed(1)}</span></span></div>;
 
 function SquadCard({ p, t, onOpen }) {
-  const k = kindOf(p.role);
-  const cells = k === 'bowl' ? [['M', p.matches], ['WKTS', p.wkts], ['ECON', p.econ]]
-    : k === 'bat' ? [['M', p.matches], ['RUNS', p.runs], ['AVG', p.avg], ['SR', p.sr]]
-    : [['RUNS', p.runs], ['SR', p.sr], ['WKTS', p.wkts], ['ECON', p.econ]];
+  const k = kindOf(p.role), c = p.career || { m: p.matches, runs: p.runs, avg: p.avg, sr: p.sr, wkts: p.wkts, econ: p.econ };   // career to date, falls back to the season
+  const cells = k === 'bowl' ? [['M', c.m], ['WKTS', c.wkts], ['ECON', c.econ]]
+    : k === 'bat' ? [['M', c.m], ['RUNS', c.runs], ['AVG', c.avg], ['SR', c.sr]]
+    : [['RUNS', c.runs], ['SR', c.sr], ['WKTS', c.wkts], ['ECON', c.econ]];
   return <button disabled={!p.id} onClick={() => onOpen(p.id)} className="card p-4 text-left w-full h-full">
     <div className="flex justify-between"><span className="chip">{p.role || 'Player'}</span><span className="font-pixel text-lg text-lime">{p.impact}</span></div>
     <div className="flex items-center gap-3 mt-3"><PixelAvatar name={p.name} color={t.color} accent={t.accent} size={40} />
       <div className="min-w-0"><div className="font-display font-bold truncate">{p.name}</div><div className="text-xs text-mute">{p.jersey ? `#${p.jersey}` : ''}</div></div></div>
     <Tags p={p} />
-    <div className="grid gap-1 mt-4 pt-3 border-t border-line" style={{ gridTemplateColumns: `repeat(${cells.length}, 1fr)` }}>{cells.map(([a, b]) => <Stat key={a} k={a} v={b} />)}</div></button>;
+    <div className="text-[10px] text-mute mt-3">{p.career ? 'CAREER TO DATE' : 'THIS SELECTION'}</div>
+    <div className="grid gap-1 mt-1 pt-2 border-t border-line" style={{ gridTemplateColumns: `repeat(${cells.length}, 1fr)` }}>{cells.map(([a, b]) => <Stat key={a} k={a} v={b} />)}</div>
+    <div className="text-[11px] text-mute mt-2">This season: {k === 'bowl' ? `${p.wkts} wkts` : `${p.runs} runs`} in {p.matches} {p.matches === 1 ? 'match' : 'matches'}</div></button>;
 }
 
 function TeamPage({ code, format }) {
@@ -356,7 +358,7 @@ function TeamPage({ code, format }) {
       <p className="text-xs text-mute mt-3">{Object.entries(d.venues).sort((a, b) => b[1].p - a[1].p).slice(0, 4).map(([v, x]) => `${v} ${x.w}/${x.p}`).join(' · ')}</p></div>
 
     <div><h2 className="font-display font-bold text-xl">Squad · {label}{format ? ` · ${format}` : ''}</h2>
-      <p className="text-xs text-mute mb-3">{basis ? `No lineups are recorded for ${label} yet. Showing ${t.name}'s last ${basis.matches} matches that have lineups (${basis.season}, up to ${basis.last}).` : `Only players who played for ${t.name} in this ${season === 'all' ? 'selection (most appearances first)' : 'season'}. Stats are for these matches.`}</p>
+      <p className="text-xs text-mute mb-3">{basis ? `No lineups are recorded for ${label} yet. Showing ${t.name}'s last ${basis.matches} matches that have lineups (${basis.season}, up to ${basis.last}).` : `Players who played for ${t.name} in ${season === 'all' ? 'this selection' : 'this season'}. Cards show career totals up to ${season === 'all' ? 'today' : 'the end of this season'}; the small line shows the season alone.`}</p>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         {squad && !squad.length && <Duck text="Nobody walked out here. Out for a duck!" />}
         {(squad || []).map((p, i) => <Reveal key={p.name} delay={(i % 4) * 60}><SquadCard p={p} t={t} onOpen={n => { location.hash = `#/player/${encodeURIComponent(n)}${t.domestic ? '?ctx=domestic' : ''}`; }} /></Reveal>)}
